@@ -1,0 +1,138 @@
+---
+title: "Reading data from the web"
+author: "Eric Morris"
+date: "10/11/2018"
+output: github_document
+---
+
+```{r, include = FALSE}
+library(tidyverse)
+
+knitr::opts_chunk$set(
+  fig.width = 6,
+  fig.asp = .6,
+  out.width = "90%"
+)
+
+theme_set(theme_bw() + theme(legend.position = "bottom"))
+```
+
+Load some packages.
+
+```{r}
+library(rvest)
+library(httr)
+```
+
+## Scrape a table
+
+First get the HTML
+
+```{r}
+url = "http://samhda.s3-us-gov-west-1.amazonaws.com/s3fs-public/field-uploads/2k15StateFiles/NSDUHsaeShortTermCHG2015.htm"
+drug_use_xml = read_html(url)
+```
+
+Get the tables from the HTML
+
+```{r}
+table_mj = 
+drug_use_xml %>% 
+  html_nodes(css = "table") %>% 
+  .[[1]] %>% 
+  html_table() %>% 
+  slice(-1) %>% 
+  as_tibble()
+```
+
+Learning assessment 
+
+```{r}
+
+nyc_cost = read_html("https://www.bestplaces.net/cost_of_living/city/new_york/new_york") %>% 
+  html_nodes(css = "table") %>% 
+  .[[1]] %>% 
+  html_table(header = TRUE) 
+
+
+```
+
+## CSS Selectors 
+
+HP!!!
+
+```{r}
+hpsaga_html = read_html("https://www.imdb.com/list/ls000630791/")
+
+titles = 
+  hpsaga_html %>% 
+  html_nodes(css = ".lister-item-header a") %>% 
+  html_text()
+
+money = 
+  hpsaga_html %>% 
+  html_nodes(css = ".text-small:nth-child(7) span:nth-child(5)") %>% 
+  html_text()
+
+hpsaga_df = tibble(
+  title = titles, 
+  gross_rev = money
+)
+```
+
+
+Napoleon Dynamite
+
+```{r}
+dynamite_html = read_html("https://www.amazon.com/product-reviews/B00005JNBQ/ref=cm_cr_arp_d_viewopt_rvwer?ie=UTF8&reviewerType=avp_only_reviews&sortBy=recent&pageNumber=1")
+
+review_titles = 
+  dynamite_html %>% 
+  html_nodes(css = "#cm_cr-review_list .review-title") %>% 
+  html_text()
+
+review_stars = 
+  dynamite_html %>% 
+  html_nodes(css = "#cm_cr-review_list .review-rating") %>% 
+  html_text()
+
+review_text = 
+  dynamite_html %>% 
+  html_nodes(css = "#cm_cr-review_list .review-text") %>% 
+  html_text()
+
+reviews = tibble(
+  title = review_titles,
+  stars = review_stars,
+  text = review_text
+)
+```
+
+
+## APIs
+
+Get the water data, as JSON
+
+```{r}
+nyc_water_json = GET("https://data.cityofnewyork.us/resource/waf7-5gvc.json") %>% 
+  content("text") %>% 
+  jsonlite::fromJSON()
+```
+
+As CSV
+
+```{r}
+nyc_water_csv = GET("https://data.cityofnewyork.us/resource/waf7-5gvc.csv") %>% 
+  content("parsed") %>% 
+  as_tibble()
+```
+
+
+BRFSS
+
+```{r}
+brfss_smart2010 = 
+  GET("https://data.cdc.gov/api/views/acme-vg9e/rows.csv?accessType=DOWNLOAD") %>% 
+  content("parsed")
+```
+
