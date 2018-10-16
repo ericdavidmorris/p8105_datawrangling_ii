@@ -1,6 +1,6 @@
 ---
 title: "Strings and Factors"
-author: "Jeff Goldsmith"
+author: "Eric morris"
 date: "10/16/2018"
 output: github_document
 ---
@@ -21,5 +21,301 @@ Load some packages.
 
 ```{r}
 library(rvest)
+library(p8105.datasets)
+```
+
+## Regular Expressions, regex
+
+```{r}
+string_vec = c("my", "name", "is", "jeff")
+
+str_detect(string_vec, "jeff")
+
+str_replace(string_vec, "jeff", "Jeff")
+```
+
+```{r}
+string_vec = c(
+  "i think we all rule for participating",
+  "i think i have been caught",
+  "i think this will be quite fun actually",
+  "it will be fun, i think"
+  )
+
+str_detect(string_vec, "^i think") #begin with i think
+str_detect(string_vec, "i think$") #end with i think 
+
+```
+
+Designating a list of characters that will count as a match
+
+```{r}
+string_vec = c(
+  "Y'all remember Pres. HW Bush?",
+  "I saw a green bush",
+  "BBQ and Bushwalking at Molonglo Gorge",
+  "BUSH!!"
+  )
+
+str_detect(string_vec,"[Bb]ush") #multiple options for a match using [ ]
+```
+
+Can provide a range instead: 
+
+```{r}
+string_vec = c(
+  '7th inning stretch',
+  '1st half soon to begin. Texas won the toss.',
+  'she is 5 feet 4 inches tall',
+  '3AM - cant sleep :('
+  )
+
+str_detect(string_vec, "^[0-9][a-zA-Z]")
+```
+
+Special symbol dot
+
+```{r}
+string_vec = c(
+  'Its 7:11 in the evening',
+  'want to go to 7-11?',
+  'my flight is AA711',
+  'NetBios: scanning ip 203.167.114.66'
+  )
+
+str_detect(string_vec, "7.11") #the period matches any character
+```
+
+However there are other special characters like [ ] ( ) . and \ (which can also be used to specify for a special char)
+
+```{r}
+string_vec = c(
+  'The CI is [2, 5]',
+  ':-]',
+  ':-[',
+  'I found the answer on pages [6-7]'
+  )
+
+str_detect(string_vec, "\\[")
+```
+
+## PULSE Dataset
+
+Tidying the PULSE Dataset 
+
+```{r}
+pulse_data = haven::read_sas("./data/public_pulse_data.sas7bdat") %>%
+  janitor::clean_names() %>%
+  gather(key = visit, value = bdi, bdi_score_bl:bdi_score_12m) %>%
+  mutate(visit = str_replace(visit, "bdi_score_", ""),
+         visit = str_replace(visit, "bl", "00m"),
+         visit = fct_relevel(visit, str_c(c("00", "01", "06", "12"), "m"))) %>%
+  arrange(id, visit)
+```
+
+##NSDUH
+
+```{r}
+url = "http://samhda.s3-us-gov-west-1.amazonaws.com/s3fs-public/field-uploads/2k15StateFiles/NSDUHsaeShortTermCHG2015.htm"
+drug_use_xml = read_html(url)
+
+table_marj = (drug_use_xml %>% html_nodes(css = "table")) %>% 
+  .[[1]] %>%
+  html_table() %>%
+  slice(-1) %>%
+  as_tibble()
+```
+
+Cleaning up this imported data (stripping p-values, changing ages, etc.)
+
+```{r}
+data_marj = 
+  table_marj %>%
+  select(-contains("P Value")) %>%
+  gather(key = key, value = percent, -State) %>%
+  separate(key, into = c("age", "year"), sep = "\\(") %>%
+  mutate(year = str_replace(year, "\\)", ""),
+         percent = str_replace(percent, "[a-c]$", ""),
+         percent = as.numeric(percent)) %>%
+  filter(!(State %in% c("Total U.S.", "Northeast", "Midwest", "South", "West")))
+```
+
+Now we can start plotting 
+
+```{r}
+data_marj %>%
+  filter(age == "12-17") %>% 
+  mutate(State = fct_reorder(State, percent)) %>% #reorders the state variable determined by % variable
+  ggplot(aes(x = State, y = percent, color = year)) + 
+    geom_point() + 
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+## Dynamite Reviews, multiple pages 
+
+```{r}
+url_base = "https://www.amazon.com/product-reviews/B00005JNBQ/ref=cm_cr_arp_d_viewopt_rvwer?ie=UTF8&reviewerType=avp_only_reviews&sortBy=recent&pageNumber="
+
+urls = str_c(url_base, 1:5)
+
+read_html(urls[1]) %>% 
+  html_nodes("#cm_cr-review_list .review-title") %>%
+  html_text()
+
+read_html(urls[2]) %>% 
+  html_nodes("#cm_cr-review_list .review-title") %>%
+  html_text()
+```
+
+
+## Factors!!!
+
+Why factors get confusing, underlying numeric pieces
+
+```{r}
+vec_sex = factor(c("male", "male", "female", "female"))
+as.numeric(vec_sex)
+
+vec_sex = relevel(vec_sex, ref = "male")
+vec_sex
+
+as.numeric(vec_sex)
+```
+
+
+Playing around with factors
+
+```{r, cache = TRUE}
+weather_df = 
+  rnoaa::meteo_pull_monitors(c("USW00094728", "USC00519397", "USS0023B17S"),
+                      var = c("PRCP", "TMIN", "TMAX"), 
+                      date_min = "2017-01-01",
+                      date_max = "2017-12-31") %>%
+  mutate(
+    name = recode(id, USW00094728 = "CentralPark_NY", 
+                      USC00519397 = "Waikiki_HA",
+                      USS0023B17S = "Waterhole_WA"),
+    tmin = tmin / 10,
+    tmax = tmax / 10) %>%
+  select(name, id, everything())
+
+```
+
+```{r}
+weather_df %>% 
+  mutate(name = factor(name)) %>% pull(name)
+
+#But instead do this to go away from alphabetical which would happen if you remove the mutate 
+
+weather_df %>%
+  mutate(name = forcats::fct_relevel(name, c("Waikiki_HA", "CentralPark_NY", "Waterhole_WA"))) %>% 
+  ggplot(aes(x = name, y = tmax)) + 
+  geom_violin(aes(fill = name), color = "blue", alpha = .5) + 
+  theme(legend.position = "bottom")
+```
+
+Reorder instead of relevel (median default)
+
+```{r}
+weather_df %>%
+  mutate(name = forcats::fct_reorder(name, tmax)) %>% 
+  ggplot(aes(x = name, y = tmax)) + 
+  geom_violin(aes(fill = name), color = "blue", alpha = .5) + 
+  theme(legend.position = "bottom")
+```
+
+Factors make a difference in modeling too 
+
+```{r}
+weather_df %>%
+  lm(tmax ~ name, data = .)
+
+#Changing the ref category from Central Park 
+
+weather_df %>%
+  mutate(name = forcats::fct_relevel(name, c("Waikiki_HA", "CentralPark_NY", "Waterhole_WA"))) %>% 
+  lm(tmax ~ name, data = .)
+```
+
+
+## Restaurant Inspection Data
+
+```{r}
+data(rest_inspec)
+
+rest_inspec %>% 
+  group_by(boro, grade) %>% 
+  summarize(n = n()) %>% 
+  spread(key = grade, value = n)
+```
+
+Inspecting these data, making data easier to read 
+
+```{r}
+rest_inspec =
+  rest_inspec %>%
+  filter(grade %in% c("A", "B", "C"), boro != "Missing") %>% 
+  mutate(boro = str_to_title(boro))
+```
+
+Pizza places
+
+```{r}
+rest_inspec %>% 
+  filter(str_detect(dba, "Pizza")) %>% 
+  group_by(boro, grade) %>% 
+  summarize(n = n()) %>% 
+  spread(key = grade, value = n)
+
+# that's not right, let's fix the detect
+
+rest_inspec %>% 
+  filter(str_detect(dba, "[Pp][Ii][Zz][Zz][Aa]")) %>% 
+  group_by(boro, grade) %>% 
+  summarize(n = n()) %>% 
+  spread(key = grade, value = n)
+```
+
+Bar plot to visualize this 
+
+```{r}
+library(viridis)
+
+rest_inspec %>% 
+  filter(str_detect(dba, "[Pp][Ii][Zz][Zz][Aa]")) %>%
+  ggplot(aes(x = boro, fill = grade)) + 
+  geom_bar() + 
+  scale_fill_viridis(discrete = TRUE)
+
+# reordering 
+
+rest_inspec %>% 
+  filter(str_detect(dba, "[Pp][Ii][Zz][Zz][Aa]")) %>%
+  mutate(boro = fct_infreq(boro)) %>%
+  ggplot(aes(x = boro, fill = grade)) + 
+  geom_bar() + 
+  scale_fill_viridis(discrete = TRUE)
+```
+
+Change factor values 
+
+```{r}
+rest_inspec %>% 
+  filter(str_detect(dba, "[Pp][Ii][Zz][Zz][Aa]")) %>%
+  mutate(boro = fct_infreq(boro),
+         boro = replace(boro, which(boro == "Brooklyn"), "HipsterHQ")) %>%
+  ggplot(aes(x = boro, fill = grade)) + 
+  geom_bar() + 
+  scale_fill_viridis(discrete = TRUE)
+
+#recode function to change factor values
+
+rest_inspec %>% 
+  filter(str_detect(dba, regex("pizza", ignore_case = TRUE))) %>%
+  mutate(boro = fct_infreq(boro),
+         boro = fct_recode(boro, "HipsterHQ" = "Brooklyn")) %>%
+  ggplot(aes(x = boro, fill = grade)) + 
+  geom_bar() + 
+  scale_fill_viridis(discrete = TRUE)
 ```
 
